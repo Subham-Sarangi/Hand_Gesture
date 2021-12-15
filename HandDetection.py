@@ -7,45 +7,27 @@ import os
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
 
+def get_label(index, hand, results):
+    output = None
+    for idx, classification in enumerate(results.multi_handedness):
+        if classification.classification[0].index == index:
+            
+            # Process results
+            label = classification.classification[0].label
+            score = classification.classification[0].score
+            text = '{} {}'.format(label, round(score, 2))
+            
+            # Extract Coordinates
+            coords = tuple(np.multiply(
+                np.array((hand.landmark[mp_hands.HandLandmark.WRIST].x, hand.landmark[mp_hands.HandLandmark.WRIST].y)),
+            [640,480]).astype(int))
+            
+            output = text, coords
+            
+    return output
+
 cap = cv2.VideoCapture(0)
 
-class HandDetector:
-    def __init__(self, max_num_hands=2, min_detection_confidence=0.5, min_tracking_confidence=0.5):
-        #when the mediapipe is first started, it detects the hands. After that it tries to track the hands
-        #as detecting is more time consuming than tracking. If the tracking confidence goes down than the
-        #specified value then again it switches back to detection
-        self.hands = mpHands.Hands(max_num_hands=max_num_hands, min_detection_confidence=min_detection_confidence,
-                                   min_tracking_confidence=min_tracking_confidence)
-
-
-    def findHandLandMarks(self, image, handNumber=0, draw=False):
-        originalImage = image
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # mediapipe needs RGB
-        results = self.hands.process(image)
-        landMarkList = []
-
-        if results.multi_handedness:
-            label = results.multi_handedness[handNumber].classification[0].label  # label gives if hand is left or right
-            #account for inversion in webcams
-            if label == "Left":
-                label = "Right"
-            elif label == "Right":
-                label = "Left"
-
-
-        if results.multi_hand_landmarks:  # returns None if hand is not found
-            hand = results.multi_hand_landmarks[handNumber] #results.multi_hand_landmarks returns landMarks for all the hands
-
-            for id, landMark in enumerate(hand.landmark):
-                # landMark holds x,y,z ratios of single landmark
-                imgH, imgW, imgC = originalImage.shape  # height, width, channel for image
-                xPos, yPos = int(landMark.x * imgW), int(landMark.y * imgH)
-                landMarkList.append([id, xPos, yPos, label])
-
-            if draw:
-                mpDraw.draw_landmarks(originalImage, hand, mpHands.HAND_CONNECTIONS)
-
-        return landMarkList
 with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.5) as hands: 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -69,7 +51,7 @@ with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.5) a
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         
         # Detections
-        print(results)
+        #print(results)
         
         # Rendering results
         if results.multi_hand_landmarks:
@@ -78,8 +60,15 @@ with mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.5) a
                                         mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
                                         mp_drawing.DrawingSpec(color=(250, 44, 250), thickness=2, circle_radius=2),
                                          )
+                
+                # Render left or right detection
+                if get_label(num, hand, results):
+                    text, coord = get_label(num, hand, results)
+                    print(text)
+                    cv2.putText(image, text, coord, cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
             
-        
+        # Save our image    
+        #cv2.imwrite(os.path.join('Output Images', '{}.jpg'.format(uuid.uuid1())), image)
         cv2.imshow('Hand Tracking', image)
 
         if cv2.waitKey(10) & 0xFF == ord('c'):
